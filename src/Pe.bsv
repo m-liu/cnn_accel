@@ -3,6 +3,7 @@ import FIFOF::*;
 import Vector::*;
 import BRAM::*;
 import Connectable::*;
+import GetPut::*;
 
 import Common::*;
 
@@ -29,7 +30,7 @@ module mkPE(PE#(dType))
             Arith#(dType) );
 
   //TODO: make these 1 element?
-  //TODO: so many FIFOs here...
+  //TODO: so many FIFOs here... Optimization: create the FIFOs outside this module and pass in as parameter. 
   //TODO: optimization: fuse opQ with inQ as a single Q
   FIFO#(dType) inAQ <- mkFIFO();
   FIFO#(dType) inBQ <- mkFIFO();
