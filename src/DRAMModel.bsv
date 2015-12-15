@@ -17,13 +17,13 @@ typedef 14 LOG_DDR_ROWS;
 typedef 7 LOG_DDR_COLS;
 typedef 3 LOG_DDR_BANKS;
 
-typedef TExp#(LOG_DDR_BANKS) DDR_BANKS; //16384
-typedef TExp#(LOG_DDR_ROWS) DDR_ROWS;
+typedef TExp#(LOG_DDR_ROWS) DDR_ROWS; //16384
 //Each chip has 128 cols of 64-bit wide, burst over 8 cycles with width 8-bit. 
 // 8 chips per dimm concatenated to form a 64-bit interface
 // 8 bursts of 64-bit --> 512-bit mem interface
 // This is the number of 512-bit words per column
 typedef TExp#(LOG_DDR_COLS) DDR_COLS;
+typedef TExp#(LOG_DDR_BANKS) DDR_BANKS; 
 
 typedef Bit#(LOG_DDR_ROWS) RAddr;
 typedef Bit#(LOG_DDR_COLS) CAddr;
@@ -42,9 +42,9 @@ typedef struct {
 
 typedef struct {
   Bit#(64) rtag; //Read request tag
-  BAddr bAddr; 
   RAddr rAddr; 
   CAddr cAddr; 
+  BAddr bAddr; 
   Bit#(64) mask; 
   Bit#(512) data;
 } DRAMReq deriving (Bits, Eq);
@@ -53,14 +53,17 @@ typedef struct {
 // Modelled after DDR3_User_V7 in XilinxVirtex7DDR3.bsv
 interface DRAMUser;
    method    Bool              	     init_done;
-   method    Action request(BAddr ba, RAddr ra, CAddr ca, Bit#(64) mask, Bit#(512) data);
+   method    Action request(RAddr ra, CAddr ca, BAddr ba, Bit#(64) mask, Bit#(512) data);
    method    ActionValue#(Bit#(512)) read_data;
 endinterface
 
+//NOTE: Adding synth boundary will screw up the enqueuing into the bank FIFOs since
+// the request method will block if ANY FIFO is full. This is for sim only, so we leave
+// out the synth boundary. 
+// Requests are not reordered
 
-// Assume no reordering of requests
 module mkDRAMModel(DRAMUser);
-  Integer t_NewRow = 6; //Roughly tCL+tRCD+tRP @ 100MHz
+  Integer t_NewRow = 5; //Roughly tCL+tRCD+tRP @ 100MHz
   Integer t_OpenedRow = 2; //Roughly tCL @ 100MHz
 
   Vector#(DDR_BANKS, RegFile#(Bit#(TAdd#(LOG_DDR_ROWS, LOG_DDR_COLS)), Bit#(512))) mem <- replicateM(mkRegFileFull());
@@ -70,14 +73,27 @@ module mkDRAMModel(DRAMUser);
   // to wrap around. Used for serializing READ requests only. 
   Reg#(Bit#(64)) rTagCnt <- mkReg(0); 
   Reg#(Bit#(64)) rspTagCnt <- mkReg(0); 
+  // These queues need to be somewhat deep to avoid blocking other queues
   Vector#(DDR_BANKS, FIFO#(DRAMReq)) reqQs <- replicateM(mkFIFO());
+  //FIFO#(DRAMReq) reqInQ <- mkFIFO();
   Vector#(DDR_BANKS, FIFOF#(Tuple2#(Bit#(64), Bit#(512)))) respQs <- replicateM(mkFIFOF());
   FIFO#(Bit#(512)) rDataQ <- mkFIFO();
-  Reg#(Bit#(64)) cycleCnt <- mkReg(0);
+  Reg#(Bit#(32)) cyc <- mkReg(0);
  
   rule incrementCyc;
-    cycleCnt <= cycleCnt + 1;
+    cyc <= cyc + 1;
   endrule
+
+  /*
+  for (Integer b=0; b<valueOf(DDR_BANKS); b=b+1) begin
+    rule distrReq if (reqInQ.first.bAddr==fromInteger(b));
+     let req = reqInQ.first;
+     reqQs[b].enq(req);
+     reqInQ.deq;
+    endrule
+  end
+  */
+
   //Emulate latencies here. Track which row is open in each bank
   // Ensure the DRAM bandwidth is realistic depending on the Fmax of the design
 
@@ -87,7 +103,7 @@ module mkDRAMModel(DRAMUser);
     Reg#(Bit#(32)) delayCnt <- mkReg(0);
     let req = reqQs[b].first;
     rule handleReq if (ctrlSt==RDY);
-      //TODO we need to subtract 1 cycle in order to get the correct delay
+      //TODO we need to subtract 2 cycle in order to get the correct delay
       // Compute the delay based on whether we need to open a new row
       delayCnt <= ( bankSt.isOpen && bankSt.openedRow==req.rAddr ) ? 
                           fromInteger(t_OpenedRow) : fromInteger(t_NewRow);
@@ -115,6 +131,7 @@ module mkDRAMModel(DRAMUser);
         bankSt <= BankState{isOpen: True, openedRow: req.rAddr};
         reqQs[b].deq;
         ctrlSt <= RDY;
+        //$display("[%d] Done request at bank=%x", cyc, b);
       end
       else begin
         delayCnt <= delayCnt - 1;
@@ -124,19 +141,39 @@ module mkDRAMModel(DRAMUser);
   end //for banks
   
 /////////////////////////////////////////
-// Choose one of the two ways to do this
+// Choose one of the ways to do this
 /////////////////////////////////////////
-  
+ /* 
+  // BSC will determine these conflict and give a warning
   for (Integer b=0; b<valueOf(DDR_BANKS); b=b+1) begin
     rule orderReadResp if (tpl_1(respQs[b].first)==rspTagCnt);
       rDataQ.enq(tpl_2(respQs[b].first));
       rspTagCnt <= rspTagCnt + 1;
     endrule
   end
-
+*/
+  //This appears to work...
+  // Basically use a function to generate mutually exclusive conditions for each rule
+  // if (a), if (!a && b), if (!a && !b && c) ... 
+  // The notEmpty check is essential, otherwise a rule fires only when all prior fifos are notEmpty. 
+  function Bool genCondition(Integer i);
+    if (i==0) return True;
+    else begin
+      return !(respQs[i-1].notEmpty && tpl_1(respQs[i-1].first)==rspTagCnt) && genCondition(i-1);
+      //return !(tpl_1(respQs[i-1].first)==rspTagCnt) && genCondition(i-1);
+    end
+  endfunction
+  for (Integer b=0; b<valueOf(DDR_BANKS); b=b+1) begin
+    rule orderReadResp if (genCondition(b) && respQs[b].notEmpty && tpl_1(respQs[b].first)==rspTagCnt);
+    //rule orderReadResp if (genCondition(b) && tpl_1(respQs[b].first)==rspTagCnt);
+      rDataQ.enq(tpl_2(respQs[b].first));
+      rspTagCnt <= rspTagCnt + 1;
+      respQs[b].deq;
+    endrule
+  end
 
   /*
-  //I think we need to use recursion here
+  //I think we need to use recursion here. FIXME: this function is wrong
   function Bool order(Integer i); 
     if (i==0) begin
       return (respQs[i].notEmpty && tpl_1(respQs[i].first)==rspTagCnt);
@@ -193,20 +230,23 @@ module mkDRAMModel(DRAMUser);
   endrule
 */
 
+
    method Bool init_done; 
      return True;
    endmethod
 
-   method Action request(BAddr ba, RAddr ra, CAddr ca, Bit#(64) mask, Bit#(512) data);
+   method Action request(RAddr ra, CAddr ca, BAddr ba, Bit#(64) mask, Bit#(512) data);
+     $display("[%d] DRAM Request [%x %x %x] m=%x", cyc, ra, ca, ba, mask);
      if (mask==0) begin 
        rTagCnt <= rTagCnt + 1;
      end
-     DRAMReq req = DRAMReq{ rtag: rTagCnt, bAddr: ba, rAddr: ra, cAddr: ca, mask: mask, data: data };
+     DRAMReq req = DRAMReq{ rtag: rTagCnt, rAddr: ra, cAddr: ca, bAddr: ba, mask: mask, data: data };
+     //reqInQ.enq(req);
      reqQs[ba].enq(req);
    endmethod
      
-
    method ActionValue#(Bit#(512)) read_data;
+     $display("[%d] DRAM Read %x", cyc, rDataQ.first);
      rDataQ.deq;
      return rDataQ.first;
    endmethod
