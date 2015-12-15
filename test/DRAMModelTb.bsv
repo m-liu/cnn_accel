@@ -194,6 +194,8 @@ module mkTopTb();
     reqAddr <= 0;
     respAddr <= 0;
 
+    $display("[%d] All tests passed!", cyc);
+
   endseq; //Stmt test
   
 
