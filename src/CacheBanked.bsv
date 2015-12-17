@@ -19,6 +19,7 @@ import Common::*;
 interface BankedCache#(numeric type banks, numeric type depth, type bAddr, type rAddr, type dType);
   interface Vector#(banks, Put#(Tuple2#(bAddr, rAddr))) readReq;
   interface Vector#(banks, Get#(dType)) readResp;
+  interface Vector#(banks, Put#(Tuple2#(rAddr, dType))) writeReq;
 endinterface
 
 //TODO: optimization: if we assume PE rows operate in sync, we can use one
@@ -86,11 +87,25 @@ module mkBankedBRAMCache(BankedCache#(banks, depth, bAddr, rAddr, dType))
   for (Integer bo=0; bo<valueOf(banks); bo=bo+1) begin
     rule warnFull if (!respBufs[bo].notFull);
       $display("**ERROR: cache response buffer is full");
+      $finish;
     endrule
   end
   
+  Vector#(banks, Put#(Tuple2#(rAddr, dType))) wReqVec = newVector();
+  for (Integer b=0; b<valueOf(banks); b=b+1) begin
+    wReqVec[b] = (interface Put;
+                    method Action put(Tuple2#(rAddr, dType) wreq);
+                      rams[b].portB.request.put(BRAMRequest{ write: True,
+                                                      responseOnWrite: False,
+                                                      address: tpl_1(wreq),
+                                                      datain: tpl_2(wreq) });
+                    endmethod
+                  endinterface);
+  end
+
   interface readReq = map(toPut, reqBufs);
   interface readResp = map(toGet, respBufs);
+  interface writeReq = wReqVec;
 
 endmodule
 
