@@ -198,11 +198,7 @@ module mkTopTb();
 
   endseq; //Stmt test
   
-
-
   mkAutoFSM(test);
-  //mkAutoFSM(writeTest);
-
 
 endmodule
 

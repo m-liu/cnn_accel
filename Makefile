@@ -8,11 +8,11 @@ BDIR = $(BUILD_DIR)/obj
 DIRS = $(BUILD_DIR) $(VDIR) $(BDIR)
 
 #BSVFILES += $(wildcard src/*.bsv)
-BSVPATHS += src/
-TOP_BSV += src/Pe.bsv
-TOP_MODULE = mkTop
+BSVPATHS += src/:test/
+TOP_BSV += test/CacheBankedTb.bsv
+TOP_MODULE = mkCacheBankedTb
 
-all: directories sim
+all: directories compile link
 
 # Create directories if not exist
 .PHONY: directories
@@ -21,10 +21,15 @@ directories: $(DIRS)
 $(DIRS):
 	mkdir -p $(DIRS)
 
-sim:
+compile:
 	bsc -u $(BSC_FLAGS) -sim -vdir $(VDIR) -bdir $(BDIR) -info-dir $(BDIR) -simdir $(BDIR) -p +:$(BSVPATHS) -g $(TOP_MODULE) $(TOP_BSV) 
 
+link:
+	bsc -e $(TOP_MODULE) -sim -o $(BDIR)/out $(BSC_FLAGS) -vdir $(VDIR) -bdir $(BDIR) -info-dir $(BDIR) -simdir $(BDIR) -p +:$(BSVPATHS)
 
 	
+clean:
+	rm -f $(BDIR)/*
+	rm -f $(VDIR)/*
 	
 
