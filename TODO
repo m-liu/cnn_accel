@@ -1,0 +1,6 @@
+- Cu.bsv: 
+//FIXME: we use an output FIFO here, but its possible for results from diff rows of PEs
+// to be out of order. Especially if the # of MACs is small (e.g. <16). 
+// The true fix should be a completion buffer. Using a FIFO for convenience for now. 
+
+
