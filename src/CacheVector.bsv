@@ -17,8 +17,8 @@ endinterface
 
 
 module mkVectorBRAMCache(VectorCache#(banks, depth, rAddr, dType))
-  provisos (Bit#(dType, a_),
-            Bit#(rAddr, rsz),
+  provisos (Bits#(dType, a_),
+            Bits#(rAddr, rsz),
             Log#(depth, rsz));
 
   BRAM_Configure cfg = defaultValue;
@@ -46,7 +46,7 @@ module mkVectorBRAMCache(VectorCache#(banks, depth, rAddr, dType))
                       endinterface);
     writeReqVec[b] = (interface Put;
                         method Action put(Tuple2#(rAddr, dType) wreq);
-                          rams[b].portA.request.put(BRAMRequest{write: True, 
+                          rams[b].portB.request.put(BRAMRequest{write: True, 
                                             responseOnWrite: False, 
                                             address: tpl_1(wreq), 
                                             datain: tpl_2(wreq)} );
