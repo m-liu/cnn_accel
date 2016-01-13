@@ -62,6 +62,7 @@ endinterface
 // out the synth boundary. 
 // Requests are not reordered
 
+(* synthesize *)
 module mkDRAMModel(DRAMUser);
   Integer t_NewRow = 5; //Roughly tCL+tRCD+tRP @ 100MHz
   Integer t_OpenedRow = 2; //Roughly tCL @ 100MHz
