@@ -19,6 +19,14 @@ interface BankedCache#(numeric type banks, numeric type depth, type bAddr, type 
   interface Vector#(banks, Put#(Tuple2#(rAddr, dType))) writeReq;
 endinterface
 
+(*synthesize*)
+module mkBankedBRAMCacheSynth(BankedCache#(ARR_W, CACHE_DEP, Bit#(TLog#(ARR_W)), Bit#(TLog#(CACHE_DEP)), DTYPE));
+  BankedCache#(ARR_W, CACHE_DEP, Bit#(TLog#(ARR_W)), Bit#(TLog#(CACHE_DEP)), DTYPE) bc <- mkBankedBRAMCache();
+  return bc;
+endmodule
+
+
+
 //TODO: optimization: if we assume PE rows operate in sync, we can use one
 // wide interface instead of a vector of interfaces
 //TODO: Currently assumes response always drains and fixed latency BRAM. 
@@ -114,6 +122,14 @@ module mkBankedBRAMCache(BankedCache#(banks, depth, bAddr, rAddr, dType))
 
 endmodule
 
+
+
+//================================
+// Instantiate for testing
+//================================
+module mkTop();
+  Vector#(ARR_D, BankedCache#(ARR_W, CACHE_DEP, Bit#(TLog#(ARR_W)), Bit#(TLog#(CACHE_DEP)), DTYPE)) aCache <- replicateM(mkBankedBRAMCacheSynth());
+endmodule
 
 
 //================================

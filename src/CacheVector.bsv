@@ -15,6 +15,12 @@ interface VectorCache#(numeric type banks, numeric type depth, type rAddr, type 
   interface Vector#(banks, Put#(Tuple2#(rAddr, dType))) writeReq;
 endinterface
 
+(*synthesize*)
+module mkVectorBRAMCacheSynth(VectorCache#(ARR_H, CACHE_DEP, Bit#(TLog#(CACHE_DEP)), DTYPE));
+  VectorCache#(ARR_H, CACHE_DEP, Bit#(TLog#(CACHE_DEP)), DTYPE) vc <- mkVectorBRAMCache();
+  return vc;
+endmodule
+
 
 module mkVectorBRAMCache(VectorCache#(banks, depth, rAddr, dType))
   provisos (Bits#(dType, a_),
@@ -58,3 +64,13 @@ module mkVectorBRAMCache(VectorCache#(banks, depth, rAddr, dType))
   interface readResp = readRespVec;
   interface writeReq = writeReqVec;
 endmodule
+
+
+
+//================================
+// Instantiate for testing
+//================================
+module mkTop();
+  Vector#(ARR_D, VectorCache#(ARR_H, CACHE_DEP, Bit#(TLog#(CACHE_DEP)), DTYPE)) vc <- replicateM(mkVectorBRAMCacheSynth());
+endmodule
+
