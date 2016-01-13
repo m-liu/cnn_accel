@@ -3,4 +3,6 @@
 // to be out of order. Especially if the # of MACs is small (e.g. <16). 
 // The true fix should be a completion buffer. Using a FIFO for convenience for now. 
 
-
+- CacheFetcher bug
+- Speed up sim compiles using verilog/verilator sim
+- test CUArray with control
