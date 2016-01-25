@@ -3,6 +3,17 @@
 // to be out of order. Especially if the # of MACs is small (e.g. <16). 
 // The true fix should be a completion buffer. Using a FIFO for convenience for now. 
 
-- CacheFetcher bug
+- BankedBRAMCache:
+//TODO FIXME: Currently assumes response always drains and fixed latency BRAM. 
+// Otherwise we may have out-of-orderness, which may need tags/completion bufs. 
+// The way this cache is used.. we can't guarantee non-blocking output
+
+//Writeback:
+- conflicting rules to writeback to dram is not resolved
+
 - Speed up sim compiles using verilog/verilator sim
 - test CUArray with control
+
+
+
+[ok]- CacheFetcher bug
