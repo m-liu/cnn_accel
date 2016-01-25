@@ -29,8 +29,9 @@ endmodule
 
 //TODO: optimization: if we assume PE rows operate in sync, we can use one
 // wide interface instead of a vector of interfaces
-//TODO: Currently assumes response always drains and fixed latency BRAM. 
+//TODO FIXME: Currently assumes response always drains and fixed latency BRAM. 
 // Otherwise we may have out-of-orderness, which may need tags/completion bufs. 
+// The way this cache is used.. we can't guarantee non-blocking output. So we need to fix this. 
 
 module mkBankedBRAMCache(BankedCache#(banks, depth, bAddr, rAddr, dType))
  provisos (Bits#(dType, a_),

@@ -6,15 +6,11 @@ import Connectable::*;
 import GetPut::*;
 
 import Common::*;
-
-//TODO: move common typedefs out of this file
 import DRAMModel::*;
 
 typedef struct {
-  RAddr ra;
-  CAddr ca; 
-  BAddr ba;
-  Bit#(1) cacheSel;
+  DRAMAddr dramAddr; 
+  Bit#(1) cacheSel; //0 is input cache, 1 is side cache
   Bit#(TLog#(TMax#(w, h))) cacheBa;
   Bit#(TLog#(cache_dep)) cacheDa;
 } CacheFetchReq#(numeric type w, numeric type h, numeric type cache_dep) deriving (Bits, Eq);
@@ -31,6 +27,8 @@ module mkCacheFetcher#(DRAMUser dram)(CacheFetch#(w,  h,  dep,  cache_dep, dType
               Mul#(dep, a__, 512) );
 
   FIFO#(CacheFetchReq#(w, h, cache_dep)) reqQ <- mkFIFO();
+  //TODO: this size is important, should match DRAM controller queue depth
+  FIFO#(CacheFetchReq#(w, h, cache_dep)) inflightQ <- mkSizedFIFO(32); 
   //TODO these can be eliminated with some thought. 
   Vector#(dep, Vector#(w, FIFO#(Tuple2#(Bit#(TLog#(cache_dep)), dType)))) aBuf <- replicateM(replicateM(mkFIFO()));
   Vector#(dep, Vector#(h, FIFO#(Tuple2#(Bit#(TLog#(cache_dep)), dType)))) bBuf <- replicateM(replicateM(mkFIFO()));
@@ -38,23 +36,26 @@ module mkCacheFetcher#(DRAMUser dram)(CacheFetch#(w,  h,  dep,  cache_dep, dType
   //ask dram for data
   //get data from dram, break it up
   //issue a or b cache write request
-  let r = reqQ.first;
   rule handleReq if (dram.init_done); 
-    dram.request(r.ra, r.ca, r.ba, 0, ?);
+    let r = reqQ.first;
+    dram.request(r.dramAddr.ra, r.dramAddr.ca, r.dramAddr.ba, 0, ?);
+    inflightQ.enq(r);
+    reqQ.deq;
   endrule
 
   rule getDramData; 
+    let ri = inflightQ.first;
     Bit#(512) data <- dram.read_data();
     Vector#(dep, dType) dataWords = unpack(data);
     for (Integer d=0; d<valueOf(dep); d=d+1) begin
-      if (r.cacheSel==0) begin
-        aBuf[d][r.cacheBa].enq( tuple2(r.cacheDa, dataWords[d]) );
+      if (ri.cacheSel==0) begin
+        aBuf[d][ri.cacheBa].enq( tuple2(ri.cacheDa, dataWords[d]) );
       end
       else begin
-        bBuf[d][r.cacheBa].enq( tuple2(r.cacheDa, dataWords[d]) );
+        bBuf[d][ri.cacheBa].enq( tuple2(ri.cacheDa, dataWords[d]) );
       end
     end
-    reqQ.deq;
+    inflightQ.deq;
   endrule
 
   Vector#(dep, Vector#(w, Get#(Tuple2#(Bit#(TLog#(cache_dep)), dType)))) aVec = newVector();
@@ -71,8 +72,11 @@ module mkCacheFetcher#(DRAMUser dram)(CacheFetch#(w,  h,  dep,  cache_dep, dType
 endmodule
 
 
+//================================
+// Instantiate for testing
+//================================
 module mkTop();
   DRAMUser dram <- mkDRAMModel();
-  CacheFetch#(4, 8, 16, 1024, UInt#(32)) cf <- mkCacheFetcher(dram);
+  CacheFetch#(ARR_W, ARR_H, ARR_D, CACHE_DEP, DTYPE) cf <- mkCacheFetcher(dram);
 endmodule
   

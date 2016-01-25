@@ -38,7 +38,12 @@ typedef struct {
   Bool isOpen;
   RAddr openedRow;
 } BankState deriving (Bits, Eq);
-  
+ 
+typedef struct {
+  RAddr ra; 
+  CAddr ca; 
+  BAddr ba; 
+} DRAMAddr deriving (Bits, Eq);
 
 typedef struct {
   Bit#(64) rtag; //Read request tag
@@ -237,7 +242,7 @@ module mkDRAMModel(DRAMUser);
    endmethod
 
    method Action request(RAddr ra, CAddr ca, BAddr ba, Bit#(64) mask, Bit#(512) data);
-     $display("[%d] DRAM Request [%x %x %x] m=%x", cyc, ra, ca, ba, mask);
+     $display("[%d] DRAM Request [%x %x %x] m=%x, d=%x", cyc, ra, ca, ba, mask, data);
      if (mask==0) begin 
        rTagCnt <= rTagCnt + 1;
      end

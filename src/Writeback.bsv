@@ -9,12 +9,6 @@ import Common::*;
 import DRAMModel::*;
 
 typedef struct {
-  RAddr ra;
-  CAddr ca;
-  BAddr ba;
-} DRAMAddr deriving (Bits, Eq);
-
-typedef struct {
   DRAMAddr dramAddr; 
   Bit#(TLog#(w)) cacheBa;
 } WBReq#(numeric type w) deriving (Bits, Eq);
